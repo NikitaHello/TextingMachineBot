@@ -1,13 +1,16 @@
 import json
 import asyncio
 import sys
+import os
 from telegram import Bot
+from dotenv import load_dotenv
 
+load_dotenv()
 if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-TOKEN = "7828034482:AAGn_gP2fqlXSFm1Tnh49y99GrOR-Q-FtJY"
-CHAT_ID = "1725448900"  
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = os.getenv("CHAT_ID") 
 
 async def get_chat_messages():
     bot = Bot(token=TOKEN)
