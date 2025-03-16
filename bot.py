@@ -1,39 +1,32 @@
 import json
-import asyncio
-import sys
-from telegram import Bot
+from telegram import Chat, Update
+from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
-if sys.platform.startswith("win"):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+TOKEN = ""
 
-TOKEN = "7828034482:AAGn_gP2fqlXSFm1Tnh49y99GrOR-Q-FtJY"
-CHAT_ID = "1725448900"  
+messages = []
 
-async def get_chat_messages():
-    bot = Bot(token=TOKEN)
-    
-    # Получаем обновления (сообщения)
-    updates = await bot.get_updates(limit=100)
-    
-    messages = []
-    
-    for update in updates:
-        if update.message and update.message.chat.id == int(CHAT_ID):
-            messages.append({
-                "from": update.message.from_user.username,
-                "text": update.message.text
-            })
-    
-    print(messages)
+async def trackchat(update: Update , context: ContextTypes.DEFAULT_TYPE) -> None:
+    global messages
+    sender = update.effective_message.from_user.first_name
+    text = update.effective_message.text
+    messages.append({"sender": sender, "text": text})
 
-    # Сохранение в JSON-файл
-    with open("messages.json", "w", encoding="utf-8") as file:
-        json.dump(messages, file, indent=4, ensure_ascii=False)
-    
-    print("✅ Сообщения сохранены в messages.json")
+    if len(messages) >= 100:
+        messages_json = json.dumps(messages, ensure_ascii=False, indent=2)
 
-async def main():
-    await get_chat_messages()
+        await process_messages(messages_json)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+        messages.clear()
+
+async def process_messages(messages_json: str) -> None:
+    #вызов аишки
+    #отправка результата в чат (читаем документацию)
+
+def main() -> None:
+    TextingMachine = Application.builder().token(TOKEN).build()
+    TextingMachine.add_handler(MessageHandler(filters.TEXT, trackchat))
+    TextingMachine.run_polling(allowed_updates=Update.MESSAGE)
+
+if __name__== "__main__":
+    main()
