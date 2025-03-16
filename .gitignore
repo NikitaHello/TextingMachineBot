@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 *.pyo
 Python_scripts.txt
+.json
