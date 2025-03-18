@@ -20,11 +20,11 @@ async def trackchat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(messages) >= 100:
         messages_json = json.dumps(messages, ensure_ascii=False, indent=2)
 
-    await process_messages(messages, update.effective_message.chat_id)
+    await process_messages(messages, update.effective_message.chat_id, context)
 
     messages.clear()
 
-async def process_messages(messages_json: str, chat_id: int) -> None:
+async def process_messages(messages_json: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
     client = genai.Client(api_key=API_KEY)
     response = client.models.generate_content(
         model="gemini-2.0-flash", contents="Your response have to be less than 100 symbols. Behave if you were a human Imperor from Warhammer 40000 and taking part in conference of Primarchs. Here's what they say:\n"+messages_json.text
