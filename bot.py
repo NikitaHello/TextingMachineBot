@@ -1,42 +1,40 @@
 import json
-import asyncio
-import sys
 import os
-from telegram import Bot
+import sys
 from dotenv import load_dotenv
+from google import genai
+from telegram import Update
+from telegram.ext import Application, ContextTypes, MessageHandler, CommandHandler, filters
 
 load_dotenv()
-if sys.platform.startswith("win"):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 TOKEN = os.getenv("TOKEN")
-CHAT_ID = os.getenv("CHAT_ID") 
+API_KEY = os.getenv("API_KEY")
 
-async def get_chat_messages():
-    bot = Bot(token=TOKEN)
-    
-    # Получаем обновления (сообщения)
-    updates = await bot.get_updates(limit=100)
-    
-    messages = []
-    
-    for update in updates:
-        if update.message and update.message.chat.id == int(CHAT_ID):
-            messages.append({
-                "from": update.message.from_user.username,
-                "text": update.message.text
-            })
-    
-    print(messages)
+messages = []
 
-    # Сохранение в JSON-файл
-    with open("messages.json", "w", encoding="utf-8") as file:
-        json.dump(messages, file, indent=4, ensure_ascii=False)
-    
-    print("✅ Сообщения сохранены в messages.json")
+async def trackchat(update: Update , context: ContextTypes.DEFAULT_TYPE) -> None:
+    global messages
+    sender = update.effective_message.from_user.first_name
+    text = update.effective_message.text
+    messages.append({"sender": sender, "text": text})
+    if len(messages) >= 100:
+        messages_json = json.dumps(messages, ensure_ascii=False, indent=2)
 
-async def main():
-    await get_chat_messages()
+    await process_messages(messages)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    messages.clear()
+
+async def process_messages(messages_json: str) -> None:
+    client = genai.Client(api_key=API_KEY)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash", contents="Your response have to be less than 100 symbols. Behave if you were a human Imperor from Warhammer 40000 and taking part in coference of Primarchs. Here's what they say:\n"+messages_json.text
+    )
+    print(response.text)
+
+def main() -> None:
+    TextingMachine = Application.builder().token(TOKEN).build()
+    TextingMachine.add_handler(MessageHandler(filters.TEXT, trackchat))
+    TextingMachine.run_polling(allowed_updates=Update.MESSAGE)
+
+if __name__== "__main__":
+    main()
