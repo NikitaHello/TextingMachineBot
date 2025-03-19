@@ -4,30 +4,42 @@ import sys
 from dotenv import load_dotenv
 from google import genai
 from telegram import Update
-from telegram.ext import Application, ContextTypes, MessageHandler, CommandHandler, filters
+from telegram.ext import Application, ContextTypes, MessageHandler
+from telegram.ext import CommandHandler, filters
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
 
 messages = []
+a = 0 # счетчик сообщений
 
-async def trackchat(update: Update , context: ContextTypes.DEFAULT_TYPE) -> None:
+async def trackchat(update: Update, 
+                    context: ContextTypes.DEFAULT_TYPE) -> None:
     global messages
+    global a
     sender = update.effective_message.from_user.first_name
     text = update.effective_message.text
     messages.append({"sender": sender, "text": text})
     if len(messages) >= 100:
         messages_json = json.dumps(messages, ensure_ascii=False, indent=2)
-        await process_messages(messages_json)
+        await process_messages(messages_json, update.effective_message.chat_id,
+                               context)
+        messages.clear()
+    a += 1
+    print (a)
 
-    messages.clear()
-
-async def process_messages(messages_json: str) -> None:
+async def process_messages(messages_json: str, chat_id: int,
+                          context: ContextTypes.DEFAULT_TYPE) -> None:
     client = genai.Client(api_key=API_KEY)
     response = client.models.generate_content(
-        model="gemini-2.0-flash", contents="Your response have to be less than 100 symbols. Behave if you were a human Imperor from Warhammer 40000 and taking part in coference of Primarchs. Here's what they say:\n"+messages_json
+        model="gemini-2.0-flash", 
+        contents="Your response have to be less than 100 symbols and in " \
+                 "Russian. Behave if you were a human Imperor from Warhammer" \
+                  " 40000, taking part in conference of Primarchs. Here's " \
+                  "what they say:\n" + messages_json
     )
+    await context.bot.send_message(chat_id, text = response.text) #вроде должно работать...
     print(response.text)
 
 def main() -> None:
