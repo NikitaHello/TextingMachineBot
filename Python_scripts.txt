@@ -1,1 +1,2 @@
-API for TextingMahcineBot: 7828034482:AAGn_gP2fqlXSFm1Tnh49y99GrOR-Q-FtJY
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519.pub
