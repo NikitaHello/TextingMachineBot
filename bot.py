@@ -21,7 +21,7 @@ async def trackchat(update: Update,
     sender = update.effective_message.from_user.first_name
     text = update.effective_message.text
     messages.append({"sender": sender, "text": text})
-    if len(messages) >= 100:
+    if len(messages) >= 20:
         messages_json = json.dumps(messages, ensure_ascii=False, indent=2)
         await process_messages(messages_json, update.effective_message.chat_id,
                                context)
@@ -34,10 +34,10 @@ async def process_messages(messages_json: str, chat_id: int,
     client = genai.Client(api_key=API_KEY)
     response = client.models.generate_content(
         model="gemini-2.0-flash", 
-        contents="Your response have to be less than 100 symbols and in " \
-                 "Russian. Behave if you were a human Imperor from Warhammer" \
-                  " 40000, taking part in conference of Primarchs. Here's " \
-                  "what they say:\n" + messages_json
+        contents="Your response have to be less than 2000 symbols and in " \
+                 "Russian. Behave if you were a sexy cat-wife companion. " \
+                 "Try to respond more closely to the text. Here's what " \
+                 "has been written before in chat:" + messages_json
     )
     await context.bot.send_message(chat_id, text = response.text) #вроде должно работать...
     print(response.text)
