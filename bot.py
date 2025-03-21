@@ -6,28 +6,40 @@ from google import genai
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler
 from telegram.ext import CommandHandler, filters
+from aiotinydb import AIOTinyDB, Query
+from datetime import datetime
+import statistics
+
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
 
-messages = []
-a = 0 # счетчик сообщений
+db = AIOTinyDB("messages.json")
+Message = Query()
 
 async def trackchat(update: Update, 
                     context: ContextTypes.DEFAULT_TYPE) -> None:
-    global messages
-    global a
+    chat_id = update.effective_chat.id
     sender = update.effective_message.from_user.first_name
     text = update.effective_message.text
-    messages.append({"sender": sender, "text": text})
-    if len(messages) >= 20:
-        messages_json = json.dumps(messages, ensure_ascii=False, indent=2)
+    
+    await add_message(chat_id, sender, text)
+
+    cache = await get_chat_cache(chat_id)
+    trigger = await get_dynamic_trigger(chat_id)
+
+    if len(cache) >= trigger:
+        messages_json = json.dumps(
+            [{"sender": m["sender"], "text": m["text"]} for m in cache],
+            ensure_ascii=False,
+            indent=2
+        )
+
         await process_messages(messages_json, update.effective_message.chat_id,
                                context)
-        messages.clear()
-    a += 1
-    print (a)
+        
+        await clear_chat_cache(chat_id)
 
 async def process_messages(messages_json: str, chat_id: int,
                           context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -41,6 +53,49 @@ async def process_messages(messages_json: str, chat_id: int,
     )
     await context.bot.send_message(chat_id, text = response.text) #вроде должно работать...
     print(response.text)
+
+async def add_message(chat_id, sender, text):
+    entry={
+        "chat_id": chat_id,
+        "sender": sender,
+        "text": text,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    await db.insert({**entry, "type": "cache"})
+
+    await db.insert({**entry, "type": "history"})
+
+    history = await db.search((Message.chat_id == chat_id) & (Message.type == "history"))
+    if len(history) > 100:
+        history.sort(key=lambda m: m["timestamp"])
+        to_delete = history[:len(history) - 100]
+        for msg in to_delete:
+            await db.remove(doc_ids=[msg.doc_id])
+
+async def get_chat_cache(chat_id):
+    return await db.search((Message.chat_id == chat_id) & (Message.type == "cache"))
+
+async def get_chat_history(chat_id):
+    return await db.search((Message.chat_id == chat_id) & (Message.type == "history"))
+
+async def clear_chat_cache(chat_id):
+    await db.remove((Message.chat_id == chat_id) & (Message.type == "cache"))
+
+def clamp(val, min_val, max_val):
+    return max(min_val, min(val, max_val))
+
+async def get_dynamic_trigger(chat_id: int) -> int:
+    messages = await get_chat_history(chat_id)
+    if len(messages) < 5:
+        return 5
+
+    sorted_msgs = sorted(messages[-20:], key=lambda m: m["timestamp"])
+    times = [datetime.fromisofromat(m["timestamp"]) for m in sorted_msgs]
+    intervals = [(t2 - t1).total_seconds() for t1, t2 in zip(times, times[1:])]
+    avg_interval = statistics.mean(intervals) if intervals else 1.0
+
+    return clamp(round(30 / avg_interval), 5, 40)    
 
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
