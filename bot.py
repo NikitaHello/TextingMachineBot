@@ -6,8 +6,9 @@ from google import genai
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler
 from telegram.ext import CommandHandler, filters
-from aiotinydb import AIOTinyDB, Query
+from tinydb import TinyDB, Query
 from datetime import datetime
+import random
 import statistics
 
 
@@ -15,8 +16,8 @@ load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
 
-db = AIOTinyDB("messages.json")
-prompts_db = AIOTinyDB("prompts.json")
+db = TinyDB("messages.json")
+prompts_db = TinyDB("prompts.json")
 Message = Query()
 Prompt = Query()
 
@@ -28,7 +29,7 @@ async def trackchat(update: Update,
     
     await add_message(chat_id, sender, text)
 
-    cache = await get_chat_cache(chat_id)
+    cache = get_chat_cache(chat_id)
     trigger = await get_dynamic_trigger(chat_id)
 
     if len(cache) >= trigger:
@@ -41,7 +42,7 @@ async def trackchat(update: Update,
         await process_messages(messages_json, chat_id,
                                context)
         
-        await clear_chat_cache(chat_id)
+        clear_chat_cache(chat_id)
 
 async def process_messages(messages_json: str, chat_id: int,
                           context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -65,43 +66,44 @@ async def add_message(chat_id, sender, text):
         "timestamp": datetime.now().isoformat()
     }
 
-    await db.insert({**entry, "type": "cache"})
+    db.insert({**entry, "type": "cache"})
 
-    await db.insert({**entry, "type": "history"})
+    db.insert({**entry, "type": "history"})
 
-    history = await db.search((Message.chat_id == chat_id) & (Message.type == "history"))
+    history = db.search((Message.chat_id == chat_id) & (Message.type == "history"))
     if len(history) > 100:
         history.sort(key=lambda m: m["timestamp"])
         to_delete = history[:len(history) - 100]
         for msg in to_delete:
-            await db.remove(doc_ids=[msg.doc_id])
+            db.remove(doc_ids=[msg.doc_id])
 
-async def get_chat_cache(chat_id):
-    return await db.search((Message.chat_id == chat_id) & (Message.type == "cache"))
+def get_chat_cache(chat_id):
+    return db.search((Message.chat_id == chat_id) & (Message.type == "cache"))
 
-async def get_chat_history(chat_id):
-    return await db.search((Message.chat_id == chat_id) & (Message.type == "history"))
+def get_chat_history(chat_id):
+    return db.search((Message.chat_id == chat_id) & (Message.type == "history"))
 
-async def clear_chat_cache(chat_id):
-    await db.remove((Message.chat_id == chat_id) & (Message.type == "cache"))
+def clear_chat_cache(chat_id):
+    db.remove((Message.chat_id == chat_id) & (Message.type == "cache"))
 
 async def get_random_prompt():
-    prompts = await prompts_db.all()
-    if not prompts:
-        return "Placeholder prompt. Behave as you wish."
+    prompts = prompts_db.all()
+
     templates = [t["template"] for t in prompts]
+    if not templates:
+        return "Behave as if you were a sexy cat-wife companion."
     return random.choice(templates)
 
 def clamp(val, min_val, max_val):
     return max(min_val, min(val, max_val))
 
 async def get_dynamic_trigger(chat_id: int) -> int:
-    messages = await get_chat_history(chat_id)
+    messages = get_chat_history(chat_id)
     if len(messages) < 5:
         return 5
 
     sorted_msgs = sorted(messages[-20:], key=lambda m: m["timestamp"])
-    times = [datetime.fromisofromat(m["timestamp"]) for m in sorted_msgs]
+    times = [datetime.fromisoformat(m["timestamp"]) for m in sorted_msgs]
     intervals = [(t2 - t1).total_seconds() for t1, t2 in zip(times, times[1:])]
     avg_interval = statistics.mean(intervals) if intervals else 1.0
 
