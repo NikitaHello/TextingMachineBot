@@ -106,8 +106,9 @@ async def get_dynamic_trigger(chat_id: int) -> int:
     times = [datetime.fromisoformat(m["timestamp"]) for m in sorted_msgs]
     intervals = [(t2 - t1).total_seconds() for t1, t2 in zip(times, times[1:])]
     avg_interval = statistics.mean(intervals) if intervals else 1.0
+    print(avg_interval)
 
-    return clamp(round(30 / avg_interval), 5, 40)    
+    return clamp(round(700 / avg_interval), 5, 40)    
 
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
