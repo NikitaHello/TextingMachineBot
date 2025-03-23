@@ -4,5 +4,5 @@ __pycache__/
 *.pyc
 *.pyo
 Python_scripts.txt
-messages*
+messages.json
 .env
