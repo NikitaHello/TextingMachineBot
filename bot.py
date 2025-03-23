@@ -38,7 +38,7 @@ async def trackchat(update: Update,
             indent=2
         )
 
-        await process_messages(messages_json, update.effective_message.chat_id,
+        await process_messages(messages_json, chat_id,
                                context)
         
         await clear_chat_cache(chat_id)
@@ -89,7 +89,12 @@ async def get_random_prompt():
     prompts = await prompts_db.all()
     if not prompts:
         return "Placeholder prompt. Behave as you wish."
+<<<<<<< HEAD
     return random.choice(prompts).template
+=======
+    templates = [t["template"] for t in prompts]
+    return random.choice(templates)
+>>>>>>> 33509cf (further fixes)
 
 def clamp(val, min_val, max_val):
     return max(min_val, min(val, max_val))
