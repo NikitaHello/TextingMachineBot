@@ -16,7 +16,9 @@ TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
 
 db = AIOTinyDB("messages.json")
+prompts_db = AIOTinyDB("prompts.json")
 Message = Query()
+Prompt = Query()
 
 async def trackchat(update: Update, 
                     context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -44,10 +46,11 @@ async def trackchat(update: Update,
 async def process_messages(messages_json: str, chat_id: int,
                           context: ContextTypes.DEFAULT_TYPE) -> None:
     client = genai.Client(api_key=API_KEY)
+    prompt_template = await get_random_prompt()
     response = client.models.generate_content(
         model="gemini-2.0-flash", 
         contents="Your response have to be less than 2000 symbols and in " \
-                 "Russian. Behave if you were a sexy cat-wife companion. " \
+                 "Russian." + prompt_template + \
                  "Try to respond more closely to the text. Here's what " \
                  "has been written before in chat:" + messages_json
     )
@@ -81,6 +84,12 @@ async def get_chat_history(chat_id):
 
 async def clear_chat_cache(chat_id):
     await db.remove((Message.chat_id == chat_id) & (Message.type == "cache"))
+
+async def get_random_prompt():
+    prompts = await prompts_db.all()
+    if not prompts:
+        return "Placeholder prompt. Behave as you wish."
+    return random.choice(prompts)
 
 def clamp(val, min_val, max_val):
     return max(min_val, min(val, max_val))
