@@ -89,7 +89,7 @@ async def get_random_prompt():
     prompts = await prompts_db.all()
     if not prompts:
         return "Placeholder prompt. Behave as you wish."
-    return random.choice(prompts)
+    return random.choice(prompts).template
 
 def clamp(val, min_val, max_val):
     return max(min_val, min(val, max_val))
