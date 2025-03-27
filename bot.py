@@ -99,8 +99,8 @@ def clamp(val, min_val, max_val):
 
 async def get_dynamic_trigger(chat_id: int) -> int:
     messages = get_chat_history(chat_id)
-    if len(messages) < 5:
-        return 5
+    if len(messages) < 20:
+        return 20
 
     sorted_msgs = sorted(messages[-20:], key=lambda m: m["timestamp"])
     times = [datetime.fromisoformat(m["timestamp"]) for m in sorted_msgs]
@@ -108,7 +108,7 @@ async def get_dynamic_trigger(chat_id: int) -> int:
     avg_interval = statistics.mean(intervals) if intervals else 1.0
     print(avg_interval)
 
-    return clamp(round(700 / avg_interval), 5, 40)    
+    return clamp(round(700 / avg_interval), 20, 50)    
 
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
