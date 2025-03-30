@@ -6,18 +6,36 @@ from google import genai
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler
 from telegram.ext import CommandHandler, filters
+from huggingface_hub import InferenceClient
 from tinydb import TinyDB, Query
 from datetime import datetime
 import random
 import statistics
+import os
 
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
+TEMP_DIR = "temp"
+os.makedirs(TEMP_DIR, exist_ok=True)
 
-db = TinyDB("messages.json")
-prompts_db = TinyDB("prompts.json")
+hfClient = InferenceClient(
+                provider="hf-inference",
+                api_key=HF_TOKEN
+                )
+
+db = TinyDB("messages.json", sort_keys=True,
+                indent=4, separators=(',',':'),
+                ensure_ascii=False
+                )
+
+prompts_db = TinyDB("prompts.json", sort_keys=True,
+                indent=4, separators=(',',':'),
+                ensure_ascii=False
+                )
+
 Message = Query()
 Prompt = Query()
 
@@ -29,12 +47,18 @@ async def trackchat(update: Update,
     
     await add_message(chat_id, sender, text)
 
-    cache = get_chat_cache(chat_id)
+    cache = sorted(get_chat_cache(chat_id), key=lambds m: m["timestamp"])
     trigger = await get_dynamic_trigger(chat_id)
 
     if len(cache) >= trigger:
         messages_json = json.dumps(
-            [{"sender": m["sender"], "text": m["text"]} for m in cache],
+            [
+                {
+                    "sender": m["sender"],
+                    "text": f'{m["sender"]} sent photo in which {m["text"]}' if m.get("is_photo") else f'{m["sender"]}:{m["text"]}'
+                }
+                 for m in cache
+            ],
             ensure_ascii=False,
             indent=2
         )
@@ -52,18 +76,20 @@ async def process_messages(messages_json: str, chat_id: int,
         model="gemini-2.0-flash", 
         contents="Your response have to be less than 2000 symbols and in " \
                  "Russian." + prompt_template + \
-                 "Try to respond more closely to the text. Here's what " \
-                 "has been written before in chat:" + messages_json
+                 "Try to respond more closely to the text." \
+                 "Users may sometimes send images (there will be a description). Here's what " \
+                 "has been going on before in chat:" + messages_json
     )
     await context.bot.send_message(chat_id, text = response.text) #вроде должно работать...
     print(response.text)
 
-async def add_message(chat_id, sender, text):
+async def add_message(chat_id, sender, text, is_photo=False):
     entry={
         "chat_id": chat_id,
         "sender": sender,
         "text": text,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "is_photo": is_photo
     }
 
     db.insert({**entry, "type": "cache"})
@@ -99,18 +125,44 @@ def clamp(val, min_val, max_val):
 
 async def get_dynamic_trigger(chat_id: int) -> int:
     messages = get_chat_history(chat_id)
-    if len(messages) < 5:
-        return 5
+    if len(messages) < 20:
+        return 20
 
     sorted_msgs = sorted(messages[-20:], key=lambda m: m["timestamp"])
     times = [datetime.fromisoformat(m["timestamp"]) for m in sorted_msgs]
     intervals = [(t2 - t1).total_seconds() for t1, t2 in zip(times, times[1:])]
     avg_interval = statistics.mean(intervals) if intervals else 1.0
+    print(avg_interval)
 
-    return clamp(round(30 / avg_interval), 5, 40)    
+    return clamp(round(700 / avg_interval), 20, 50)    
+
+async def photoCaption(update: Update,
+                context: ContextTypes.DEFAULT_TYPE) -> None:
+    
+    chat_id = update.effective_chat.id
+    sender = update.effective_message.from_user.first_name
+
+    image = update.message.photo[-1]
+    file = await photo.get_file()
+    image_path = os.path.join(TEMP_DIR, f"{file.file_unique_id}.jpg")
+    await file.download_to_drive(image_path)
+
+    try:
+        description = hfClient.image_to_text(
+                            image_path,
+                            model="Salesforce/blip-image-captioning-large"
+                            ).generated_text
+    except Exception as e:
+        print("API error:",e)
+        description = "there is something"
+
+    await add_message(chat_id, sender, description, is_photo=True)
+
+    os.remove(image_path)
 
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
+    TextingMachine.add_handler(MessageHandler(filters.PHOTO, photoCaption))
     TextingMachine.add_handler(MessageHandler(filters.TEXT, trackchat))
     TextingMachine.run_polling(allowed_updates=Update.MESSAGE)
 
