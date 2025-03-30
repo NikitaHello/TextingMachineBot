@@ -43,7 +43,14 @@ async def trackchat(update: Update,
                     context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     sender = update.effective_message.from_user.first_name
-    text = update.effective_message.text
+    
+    forwarded = update.effective_message.forward_origin
+    
+    if forwarded:
+        origin_name = get_origin_name(forwarded)
+        text = f"forwarded from {origin_name}: {update.effective_message.text}"
+    else:
+        text = update.effective_message.text
     
     await add_message(chat_id, sender, text)
 
@@ -55,7 +62,7 @@ async def trackchat(update: Update,
             [
                 {
                     "sender": m["sender"],
-                    "text": f'sent photo in which {m["text"]}' if m.get("is_photo") else f'{m["sender"]}: {m["text"]}'
+                    "text": m["text"]
                 }
                 for m in cache
             ],
@@ -120,6 +127,14 @@ async def get_random_prompt():
         return "Behave as if you were a sexy cat-wife companion."
     return random.choice(templates)
 
+def get_origin_name(forwarded) -> str:
+    origin = getattr(forwarded, "sender_user", None) or \
+                getattr(forwarded, "chat", None) or \
+                getattr(forwarded, "sender_chat", None)
+
+    return getattr(origin, "first_name", None) or\
+            getattr(origin, "title", None) or "unknown"
+
 def clamp(val, min_val, max_val):
     return max(min_val, min(val, max_val))
 
@@ -141,19 +156,28 @@ async def photoCaption(update: Update,
     
     chat_id = update.effective_chat.id
     sender = update.effective_message.from_user.first_name
+    
+    forwarded = update.effective_message.forward_origin
+    origin_name = get_origin_name(forwarded) if forwarded else ""
+
+    user_text = update.effective_message.caption or ""
 
     image = update.message.photo[-1]
     file = await image.get_file()
     image_url = file.file_path
 
     try:
-        description = hfClient.image_to_text(
+        image_description = hfClient.image_to_text(
                             image_url,
                             model="Salesforce/blip-image-captioning-large"
                             ).generated_text
     except Exception as e:
         print("API error:",e)
-        description = "there is something"
+        image_description = "there is something"
+
+    prefix = f"forwarded from {origin_name}: " if origin_name else ""
+    suffix = f" (captioned: {user_text})" if user_text else ""
+    description = f"Sent a photo {prefix}in which {image_description}{suffix}"
 
     await add_message(chat_id, sender, description, is_photo=True)
 
@@ -161,7 +185,7 @@ async def photoCaption(update: Update,
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
     TextingMachine.add_handler(MessageHandler(filters.PHOTO, photoCaption))
-    TextingMachine.add_handler(MessageHandler(filters.TEXT, trackchat))
+    TextingMachine.add_handler(MessageHandler(filters.TEXT | filters.FORWARDED, trackchat))
     TextingMachine.run_polling(allowed_updates=Update.MESSAGE)
 
 if __name__== "__main__":
