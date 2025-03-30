@@ -16,8 +16,8 @@ load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
 
-db = TinyDB("messages.json")
-prompts_db = TinyDB("prompts.json")
+db = TinyDB("messages.json", sort_keys=True, indent=4, separators=(',',':'), ensure_ascii=False)
+prompts_db = TinyDB("prompts.json", sort_keys=True, indent=4, separators=(',',':'), ensure_ascii=False)
 Message = Query()
 Prompt = Query()
 
