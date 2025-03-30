@@ -143,7 +143,7 @@ async def photoCaption(update: Update,
     sender = update.effective_message.from_user.first_name
 
     image = update.message.photo[-1]
-    file = await photo.get_file()
+    file = await image.get_file()
     image_path = os.path.join(TEMP_DIR, f"{file.file_unique_id}.jpg")
     await file.download_to_drive(image_path)
 
