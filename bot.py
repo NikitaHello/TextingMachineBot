@@ -11,7 +11,7 @@ from tinydb import TinyDB, Query
 from datetime import datetime
 import random
 import statistics
-import os
+
 
 
 load_dotenv()
