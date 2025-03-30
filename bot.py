@@ -83,7 +83,8 @@ async def process_messages(messages_json: str, chat_id: int,
         contents="Your response have to be less than 2000 symbols and in " \
                  "Russian." + prompt_template + \
                  "Try to respond more closely to the text." \
-                 "Users may sometimes send images (there will be a description). Here's what " \
+                 "Users may sometimes send images (there will be a description)." \
+                 "Users may also forward something from Telegram channels. Here's what " \
                  "has been going on before in chat:" + messages_json
     )
     await context.bot.send_message(chat_id, text = response.text) #вроде должно работать...
