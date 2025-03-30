@@ -47,7 +47,7 @@ async def trackchat(update: Update,
     
     await add_message(chat_id, sender, text)
 
-    cache = sorted(get_chat_cache(chat_id), key=lambds m: m["timestamp"])
+    cache = sorted(get_chat_cache(chat_id), key=lambda m: m["timestamp"])
     trigger = await get_dynamic_trigger(chat_id)
 
     if len(cache) >= trigger:
