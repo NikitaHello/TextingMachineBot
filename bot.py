@@ -55,9 +55,9 @@ async def trackchat(update: Update,
             [
                 {
                     "sender": m["sender"],
-                    "text": f'{m["sender"]} sent photo in which {m["text"]}' if m.get("is_photo") else f'{m["sender"]}:{m["text"]}'
+                    "text": f'sent photo in which {m["text"]}' if m.get("is_photo") else f'{m["sender"]}: {m["text"]}'
                 }
-                 for m in cache
+                for m in cache
             ],
             ensure_ascii=False,
             indent=2
@@ -144,12 +144,11 @@ async def photoCaption(update: Update,
 
     image = update.message.photo[-1]
     file = await image.get_file()
-    image_path = os.path.join(TEMP_DIR, f"{file.file_unique_id}.jpg")
-    await file.download_to_drive(image_path)
+    image_url = file.file_path
 
     try:
         description = hfClient.image_to_text(
-                            image_path,
+                            image_url,
                             model="Salesforce/blip-image-captioning-large"
                             ).generated_text
     except Exception as e:
@@ -158,7 +157,6 @@ async def photoCaption(update: Update,
 
     await add_message(chat_id, sender, description, is_photo=True)
 
-    os.remove(image_path)
 
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
