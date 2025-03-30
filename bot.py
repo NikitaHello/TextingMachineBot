@@ -18,8 +18,7 @@ load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
-TEMP_DIR = "temp"
-os.makedirs(TEMP_DIR, exist_ok=True)
+
 
 hfClient = InferenceClient(
                 provider="hf-inference",
@@ -45,7 +44,7 @@ async def trackchat(update: Update,
     sender = update.effective_message.from_user.first_name
     
     forwarded = update.effective_message.forward_origin
-    
+
     if forwarded:
         origin_name = get_origin_name(forwarded)
         text = f"forwarded from {origin_name}: {update.effective_message.text}"
