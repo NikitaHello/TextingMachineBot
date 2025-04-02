@@ -11,6 +11,7 @@ from tinydb import TinyDB, Query
 from datetime import datetime
 import random
 import statistics
+from twelvelabs import TwelveLabs
 
 
 
@@ -18,7 +19,10 @@ load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
+TL_KEY = os.getenv("TL_KEY")
+INDEX_ID = os.getenv("INDEX_ID")
 
+tfClient = TwelveLabs(api_key=TL_KEY)
 
 hfClient = InferenceClient(
                 provider="hf-inference",
@@ -90,13 +94,12 @@ async def process_messages(messages_json: str, chat_id: int,
     await context.bot.send_message(chat_id, text = response.text) #вроде должно работать...
     print(response.text)
 
-async def add_message(chat_id, sender, text, is_photo=False):
+async def add_message(chat_id, sender, text):
     entry={
         "chat_id": chat_id,
         "sender": sender,
         "text": text,
-        "timestamp": datetime.now().isoformat(),
-        "is_photo": is_photo
+        "timestamp": datetime.now().isoformat()
     }
 
     db.insert({**entry, "type": "cache"})
@@ -168,22 +171,64 @@ async def photoCaption(update: Update,
 
     try:
         image_description = hfClient.image_to_text(
-                            image_url,
-                            model="Salesforce/blip-image-captioning-large"
-                            ).generated_text
+            image_url,
+            model="Salesforce/blip-image-captioning-large"
+        ).generated_text
+        
     except Exception as e:
-        print("API error:",e)
+        print("Image API error:",e)
         image_description = "there is something"
 
     prefix = f"forwarded from {origin_name}: " if origin_name else ""
     suffix = f" (captioned: {user_text})" if user_text else ""
     description = f"Sent a photo {prefix}in which {image_description}{suffix}"
 
-    await add_message(chat_id, sender, description, is_photo=True)
+    await add_message(chat_id, sender, description)
 
+#video caption
+
+async def videoCaption(update: Update,
+                context: ContextTypes.DEFAULT_TYPE) -> None:
+    
+    chat_id = update.effective_chat.id
+    sender = update.effective_message.from_user.first_name
+    
+    forwarded = update.effective_message.forward_origin
+    origin_name = get_origin_name(forwarded) if forwarded else ""
+
+    user_text = update.effective_message.caption or ""
+
+    video = update.message.video
+    file = await video.get_file()
+    video_url = file.file_path
+
+    try:
+        tf_task = tfClient.task.create(
+            index_id=INDEX_ID,
+            url=video_url
+        )
+
+        tf_task.wait_for_done()
+
+        video_summary = tfClient.generate.summarize(
+            tf_task.id,
+            type="summary",
+            prompt="Generate a summary in no more than 100 words."
+        ).summary
+
+    except Exception as e:
+        print("Video API error:",e)
+        video_summary = "there is something"
+
+    prefix = f"forwarded from {origin_name}: " if origin_name else ""
+    suffix = f" (captioned: {user_text})" if user_text else ""
+    description = f"Sent a video {prefix}{video_summary}{suffix}"
+
+    await add_message(chat_id, sender, description)
 
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
+    TextingMachine.add_handler(MessageHandler(filters.VIDEO, videoCaption))
     TextingMachine.add_handler(MessageHandler(filters.PHOTO, photoCaption))
     TextingMachine.add_handler(MessageHandler(filters.TEXT | filters.FORWARDED, trackchat))
     TextingMachine.run_polling(allowed_updates=Update.MESSAGE)
