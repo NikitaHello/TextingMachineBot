@@ -43,7 +43,6 @@ prompts_db = TinyDB("prompts.json", sort_keys=True,
 
 Message = Query()
 Prompt = Query()
-last_response = {}
 
 #This function handles text messages and calls the *add_message* function to store the data
 #and check for trigger
@@ -60,23 +59,17 @@ async def trackchat(update: Update,
     else:
         text = update.effective_message.text
 
-    is_reply_to_bot = update.effective_message.reply_to_message \
-                        and update.effective_message.from_user.id == context.bot.id
+    is_reply_to_bot = update.effective_message.reply_to_message is not None \
+                        and update.effective_message.reply_to_message.from_user.id == context.bot.id
 
     text_final = f"replied to you the following: {text}" if is_reply_to_bot else text
 
-    await add_message(chat_id, sender, text_final)
+    await add_message(chat_id, sender, text_final, context)
 
 #This function is fed a JSON slice (referenced as cache) and uses it to prompt a Gemini API
 #The response genereated by AI is then sent to the chat
 async def process_messages(messages_json: str, chat_id: int,
                           context: ContextTypes.DEFAULT_TYPE) -> None:
-    
-    messages_json.insert(0,{
-        "sender": "You",
-        "text": last_response[chat_id]
-        })
-
     client = genai.Client(api_key=API_KEY)
     prompt_template = await get_random_prompt()
     response = client.models.generate_content(
@@ -85,17 +78,19 @@ async def process_messages(messages_json: str, chat_id: int,
                  "Russian." + prompt_template + \
                  "Try to respond more closely to the text." \
                  "Users may sometimes send images or videos (there will be a description)." \
-                 "Users may also forward something from Telegram channels. Here's what " \
-                 "has been going on before in chat:" + messages_json
+                 "Users may also forward something from Telegram channels." \
+                 "You also have different personalities and are able to see your last message." \
+                 "Here's what has been going on before in chat:" + messages_json
     )
+    context.chat_data["last_response"] = response.text
     await context.bot.send_message(chat_id, text = response.text)
-    last_response[chat_id] = rexponse.text
+    
 
 #This function serves as a main endpoint for storing the data (be it from text, photo or video).
 #First it inserts the message and its metadata into DB and then checks for a trigger (see below).
 #When trigger is met it calls "process_messages" function and clears cache.
 #It also keeps track of history (required for implementing dynamic trigger) so it does not exceed 100 messages.
-async def add_message(chat_id, sender, text):
+async def add_message(chat_id, sender, text, context: ContextTypes.DEFAULT_TYPE):
     entry={
         "chat_id": chat_id,
         "sender": sender,
@@ -111,6 +106,15 @@ async def add_message(chat_id, sender, text):
     trigger = await get_dynamic_trigger(chat_id)
 
     if len(cache) >= trigger:
+        
+        last_response = context.chat_data.get("last_response")
+
+        if last_response:
+            cache.insert(0, {
+                "sender": "Your last response",
+                "text": last_response
+            })
+
         messages_json = json.dumps(
             [
                 {
@@ -214,7 +218,7 @@ async def photoCaption(update: Update,
     suffix = f" (captioned: {user_text})" if user_text else ""
     description = f"Sent a photo {prefix}in which {image_description}{suffix}"
 
-    await add_message(chat_id, sender, description)
+    await add_message(chat_id, sender, description, context)
 
 
 #This function handles video messages and calls the *add_message* function to store the data
@@ -261,7 +265,7 @@ async def videoCaption(update: Update,
     suffix = f" (captioned: {user_text})" if user_text else ""
     description = f"Sent a video {prefix}{video_summary}{suffix}"
 
-    await add_message(chat_id, sender, description)
+    await add_message(chat_id, sender, description, context)
 
 #Starting the bot and activating handlers
 def main() -> None:
