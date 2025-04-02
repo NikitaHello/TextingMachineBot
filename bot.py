@@ -14,7 +14,7 @@ import statistics
 from twelvelabs import TwelveLabs
 
 
-
+#Enviromental variables
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("API_KEY")
@@ -22,6 +22,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 TL_KEY = os.getenv("TL_KEY")
 INDEX_ID = os.getenv("INDEX_ID")
 
+#Setting up necessary clients
 tfClient = TwelveLabs(api_key=TL_KEY)
 
 hfClient = InferenceClient(
@@ -29,6 +30,7 @@ hfClient = InferenceClient(
                 api_key=HF_TOKEN
                 )
 
+# Setting up databases
 db = TinyDB("messages.json", sort_keys=True,
                 indent=4, separators=(',',':'),
                 ensure_ascii=False
@@ -41,7 +43,10 @@ prompts_db = TinyDB("prompts.json", sort_keys=True,
 
 Message = Query()
 Prompt = Query()
+last_response = {}
 
+#This function handles text messages and calls the *add_message* function to store the data
+#and check for trigger
 async def trackchat(update: Update, 
                     context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
@@ -54,8 +59,53 @@ async def trackchat(update: Update,
         text = f"forwarded from {origin_name}: {update.effective_message.text}"
     else:
         text = update.effective_message.text
+
+    is_reply_to_bot = update.effective_message.reply_to_message \
+                        and update.effective_message.from_user.id == context.bot.id
+
+    text_final = f"replied to you the following: {text}" if is_reply_to_bot else text
+
+    await add_message(chat_id, sender, text_final)
+
+#This function is fed a JSON slice (referenced as cache) and uses it to prompt a Gemini API
+#The response genereated by AI is then sent to the chat
+async def process_messages(messages_json: str, chat_id: int,
+                          context: ContextTypes.DEFAULT_TYPE) -> None:
     
-    await add_message(chat_id, sender, text)
+    messages_json.insert(0,{
+        "sender": "You",
+        "text": last_response[chat_id]
+        })
+
+    client = genai.Client(api_key=API_KEY)
+    prompt_template = await get_random_prompt()
+    response = client.models.generate_content(
+        model="gemini-2.0-flash", 
+        contents="Your response have to be less than 2000 symbols and in " \
+                 "Russian." + prompt_template + \
+                 "Try to respond more closely to the text." \
+                 "Users may sometimes send images or videos (there will be a description)." \
+                 "Users may also forward something from Telegram channels. Here's what " \
+                 "has been going on before in chat:" + messages_json
+    )
+    await context.bot.send_message(chat_id, text = response.text)
+    last_response[chat_id] = rexponse.text
+
+#This function serves as a main endpoint for storing the data (be it from text, photo or video).
+#First it inserts the message and its metadata into DB and then checks for a trigger (see below).
+#When trigger is met it calls "process_messages" function and clears cache.
+#It also keeps track of history (required for implementing dynamic trigger) so it does not exceed 100 messages.
+async def add_message(chat_id, sender, text):
+    entry={
+        "chat_id": chat_id,
+        "sender": sender,
+        "text": text,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    db.insert({**entry, "type": "cache"})
+
+    db.insert({**entry, "type": "history"})
 
     cache = sorted(get_chat_cache(chat_id), key=lambda m: m["timestamp"])
     trigger = await get_dynamic_trigger(chat_id)
@@ -78,34 +128,6 @@ async def trackchat(update: Update,
         
         clear_chat_cache(chat_id)
 
-async def process_messages(messages_json: str, chat_id: int,
-                          context: ContextTypes.DEFAULT_TYPE) -> None:
-    client = genai.Client(api_key=API_KEY)
-    prompt_template = await get_random_prompt()
-    response = client.models.generate_content(
-        model="gemini-2.0-flash", 
-        contents="Your response have to be less than 2000 symbols and in " \
-                 "Russian." + prompt_template + \
-                 "Try to respond more closely to the text." \
-                 "Users may sometimes send images (there will be a description)." \
-                 "Users may also forward something from Telegram channels. Here's what " \
-                 "has been going on before in chat:" + messages_json
-    )
-    await context.bot.send_message(chat_id, text = response.text) #вроде должно работать...
-    print(response.text)
-
-async def add_message(chat_id, sender, text):
-    entry={
-        "chat_id": chat_id,
-        "sender": sender,
-        "text": text,
-        "timestamp": datetime.now().isoformat()
-    }
-
-    db.insert({**entry, "type": "cache"})
-
-    db.insert({**entry, "type": "history"})
-
     history = db.search((Message.chat_id == chat_id) & (Message.type == "history"))
     if len(history) > 100:
         history.sort(key=lambda m: m["timestamp"])
@@ -113,6 +135,7 @@ async def add_message(chat_id, sender, text):
         for msg in to_delete:
             db.remove(doc_ids=[msg.doc_id])
 
+#DB and other helper functions
 def get_chat_cache(chat_id):
     return db.search((Message.chat_id == chat_id) & (Message.type == "cache"))
 
@@ -141,6 +164,12 @@ def get_origin_name(forwarded) -> str:
 def clamp(val, min_val, max_val):
     return max(min_val, min(val, max_val))
 
+#The dynamic trigger is determined based on the time intervals between 20 last messages in the chat.
+#If the the interval between the messages is low (high posting speed), it dynamically adapts,
+#and vice versa. The minimum number (20) and other numbers can be adjusted.
+#This mechanism still needs some improvements.
+#The "trigger" number itself represents the number of messages required for the *add_message*
+#function to call the *process_messages* function.
 async def get_dynamic_trigger(chat_id: int) -> int:
     messages = get_chat_history(chat_id)
     if len(messages) < 20:
@@ -154,6 +183,8 @@ async def get_dynamic_trigger(chat_id: int) -> int:
 
     return clamp(round(700 / avg_interval), 20, 50)    
 
+#This function handles photo messages and calls the *add_message* function to store the data
+#and check for trigger
 async def photoCaption(update: Update,
                 context: ContextTypes.DEFAULT_TYPE) -> None:
     
@@ -185,8 +216,9 @@ async def photoCaption(update: Update,
 
     await add_message(chat_id, sender, description)
 
-#video caption
 
+#This function handles video messages and calls the *add_message* function to store the data
+#and check for trigger
 async def videoCaption(update: Update,
                 context: ContextTypes.DEFAULT_TYPE) -> None:
     
@@ -216,6 +248,11 @@ async def videoCaption(update: Update,
             prompt="Generate a summary in no more than 100 words."
         ).summary
 
+        tfClient.task.delete(
+            index_id=INDEX_ID,
+            id=tf_task.id
+        )
+
     except Exception as e:
         print("Video API error:",e)
         video_summary = "there is something"
@@ -226,6 +263,7 @@ async def videoCaption(update: Update,
 
     await add_message(chat_id, sender, description)
 
+#Starting the bot and activating handlers
 def main() -> None:
     TextingMachine = Application.builder().token(TOKEN).build()
     TextingMachine.add_handler(MessageHandler(filters.VIDEO, videoCaption))
