@@ -79,7 +79,10 @@ async def process_messages(messages_json: str, chat_id: int,
                  "Try to respond more closely to the text." \
                  "Users may sometimes send images or videos (there will be a description)." \
                  "Users may also forward something from Telegram channels." \
-                 "You also have different personalities and are able to see your last message." \
+                 "You are able to see your last message and when user respond to it." \
+                 "You have multiple personalities prompted via 'Behave as if you were...'' part." \
+                 "Ignore the style and formatting of your last message, this may be your another personality." \
+                 "Minus bonus points if you mix up personalities." \
                  "Here's what has been going on before in chat:" + messages_json
     )
     context.chat_data["last_response"] = response.text
