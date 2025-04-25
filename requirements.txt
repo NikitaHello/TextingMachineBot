@@ -56,4 +56,4 @@ yarl==1.18.3
 tinydb==4.8.2
 aiofiles==24.1.0
 aiotinydb==2.0.0
-
+huggingface_hub==0.29.3
