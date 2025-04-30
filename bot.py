@@ -9,9 +9,6 @@ from huggingface_hub import InferenceClient
 from tinydb import TinyDB, Query
 from twelvelabs import TwelveLabs
 
-from chat import trackchat
-from media import photoCaption, videoCaption
-
 
 # Enviromental constants
 load_dotenv()
@@ -47,14 +44,19 @@ Prompt = Query()
 
 # Starting the bot and activating handlers
 def main() -> None:
+
+    # Importing inside function to avoid import loop
+    from chat import trackchat
+    from media import photoCaption, videoCaption
+
     TextingMachine = Application.builder().token(TOKEN).build()
-    TextingMachine.add_handler(MessageHandler(filters.VIDEO, 
-                                              videoCaption(tfClient)))
-    TextingMachine.add_handler(MessageHandler(filters.PHOTO, 
-                                              photoCaption(hfClient)))
+    TextingMachine.add_handler(MessageHandler(filters.VIDEO,
+                                              videoCaption))
+    TextingMachine.add_handler(MessageHandler(filters.PHOTO,
+                                              photoCaption))
     TextingMachine.add_handler(
         MessageHandler(filters.TEXT | filters.FORWARDED,
-                       trackchat(db, Message)))
+                       trackchat))
     TextingMachine.run_polling(allowed_updates=Update.MESSAGE)
 
 

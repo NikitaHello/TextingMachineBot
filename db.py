@@ -1,21 +1,22 @@
-from tinydb import TinyDB, Query
 import random
 
-
-def get_chat_cache(chat_id, db: TinyDB, message: Query):
-    return db.search((message.chat_id == chat_id) & (message.type == "cache"))
+from bot import prompts_db, Message, db
 
 
-def get_chat_history(chat_id, db: TinyDB, message: Query):
-    return db.search((message.chat_id == chat_id) &
-                     (message.type == "history"))
+def get_chat_cache(chat_id):
+    return db.search((Message.chat_id == chat_id) & (Message.type == "cache"))
 
 
-def clear_chat_cache(chat_id, db: TinyDB, message: Query):
-    db.remove((message.chat_id == chat_id) & (message.type == "cache"))
+def get_chat_history(chat_id):
+    return db.search((Message.chat_id == chat_id) &
+                     (Message.type == "history"))
 
 
-async def get_random_prompt(prompts_db: TinyDB):
+def clear_chat_cache(chat_id):
+    db.remove((Message.chat_id == chat_id) & (Message.type == "cache"))
+
+
+async def get_random_prompt():
     prompts = prompts_db.all()
 
     templates = [t["template"] for t in prompts]

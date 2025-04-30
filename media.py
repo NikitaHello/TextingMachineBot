@@ -2,9 +2,9 @@ import os
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ContextTypes
-from twelvelabs import TwelveLabs
 
 from chat import get_origin_name, add_message
+from bot import tfClient, hfClient
 
 load_dotenv()
 INDEX_ID = os.getenv("INDEX_ID")
@@ -13,8 +13,7 @@ INDEX_ID = os.getenv("INDEX_ID")
 # This function handles photo messages and calls the *add_message*
 # function to store the data and check for trigger
 async def photoCaption(update: Update,
-                       context: ContextTypes.DEFAULT_TYPE,
-                       hfClient: TwelveLabs) -> None:
+                       context: ContextTypes.DEFAULT_TYPE,) -> None:
 
     chat_id = update.effective_chat.id
     sender = update.effective_message.from_user.first_name
@@ -48,8 +47,7 @@ async def photoCaption(update: Update,
 # This function handles video messages and calls the *add_message*
 # function to store the data and check for trigger
 async def videoCaption(update: Update,
-                       context: ContextTypes.DEFAULT_TYPE,
-                       tfClient: TwelveLabs) -> None:
+                       context: ContextTypes.DEFAULT_TYPE) -> None:
 
     chat_id = update.effective_chat.id
     sender = update.effective_message.from_user.first_name

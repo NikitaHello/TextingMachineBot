@@ -1,25 +1,23 @@
 import json
 import statistics
 
-from tinydb import TinyDB, Query
 from telegram.ext import ContextTypes
 from telegram import Update
-from google import genai
 from datetime import datetime
 
 from db import (get_chat_cache, get_chat_history, clear_chat_cache,
                 get_random_prompt)
+from bot import Client, Message, db
 
 
 # This function is fed a JSON slice (referenced as cache) and uses it to
 # prompt a Gemini API
 # The response genereated by AI is then sent to the chat
 async def process_messages(messages_json: str, chat_id: int,
-                           context: ContextTypes.DEFAULT_TYPE,
-                           client: genai.Client, prompts_db: TinyDB) -> None:
-    prompt_template = await get_random_prompt(prompts_db)
+                           context: ContextTypes.DEFAULT_TYPE) -> None:
+    prompt_template = await get_random_prompt()
     prompt_body = load_prompt("prompt_body.txt")
-    response = client.models.generate_content(
+    response = Client.models.generate_content(
         model="gemini-2.0-flash",
         contents="Your response have to be less than 2000 symbols and in "
                  "Russian." + prompt_template + prompt_body + messages_json
@@ -35,8 +33,7 @@ async def process_messages(messages_json: str, chat_id: int,
 # It also keeps track of history (required for implementing dynamic trigger) so
 # it does not exceed 100 messages.
 async def add_message(chat_id, sender, text,
-                      context: ContextTypes.DEFAULT_TYPE, db: TinyDB,
-                      message: Query):
+                      context: ContextTypes.DEFAULT_TYPE):
     entry = {
         "chat_id": chat_id,
         "sender": sender,
@@ -48,7 +45,8 @@ async def add_message(chat_id, sender, text,
 
     db.insert({**entry, "type": "history"})
 
-    cache = sorted(get_chat_cache(chat_id, db), key=lambda m: m["timestamp"])
+    cache = sorted(get_chat_cache(chat_id),
+                   key=lambda m: m["timestamp"])
     trigger = await get_dynamic_trigger(chat_id)
 
     if len(cache) >= trigger:
@@ -74,10 +72,10 @@ async def add_message(chat_id, sender, text,
 
         await process_messages(messages_json, chat_id,
                                context)
-        clear_chat_cache(chat_id, db)
+        clear_chat_cache(chat_id)
 
-    history = db.search((message.chat_id == chat_id) &
-                        (message.type == "history"))
+    history = db.search((Message.chat_id == chat_id) &
+                        (Message.type == "history"))
     if len(history) > 100:
         history.sort(key=lambda m: m["timestamp"])
         to_delete = history[:len(history) - 100]
@@ -88,8 +86,7 @@ async def add_message(chat_id, sender, text,
 # This function handles text messages and calls the *add_message* function to
 # store the data and check for trigger
 async def trackchat(update: Update,
-                    context: ContextTypes.DEFAULT_TYPE,
-                    db: TinyDB, message: Query) -> None:
+                    context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     sender = update.effective_message.from_user.first_name
     forwarded = update.effective_message.forward_origin
@@ -107,7 +104,7 @@ async def trackchat(update: Update,
     text_final = f"replied to you the following: {text}" if is_reply_to_bot \
         else text
 
-    await add_message(chat_id, sender, text_final, context, db, message)
+    await add_message(chat_id, sender, text_final, context)
 
 
 # The dynamic trigger is determined based on the time intervals between 20 last
@@ -117,8 +114,8 @@ async def trackchat(update: Update,
 # improvements. The "trigger" number itself represents the number of messages
 # required for the *add_message* function to call the
 # *process_messages* function.
-async def get_dynamic_trigger(chat_id: int, db: TinyDB) -> int:
-    messages = get_chat_history(chat_id, db)
+async def get_dynamic_trigger(chat_id: int) -> int:
+    messages = get_chat_history(chat_id)
     if len(messages) < 20:
         return 20
 
