@@ -82,7 +82,8 @@ async def videoCaption(update: Update,
 
     except Exception as e:
         print("Video API error:", e)
-        video_summary = "there is something"
+        if not video_summary:
+            video_summary = "there is something"
 
     prefix = f"forwarded from {origin_name}: " if origin_name else ""
     suffix = f" (captioned: {user_text})" if user_text else ""
